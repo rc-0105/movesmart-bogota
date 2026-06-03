@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MoveSmart - Rastreo de Buses Bogotá</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --success: #22c55e;
+      --warning: #eab308;
+      --critical: #ef4444;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Alert Banner */
+    .alert-banner {
+      background: linear-gradient(135deg, var(--critical), #dc2626);
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 600;
+      font-size: 14px;
+      animation: slideDown 0.4s ease-out;
+      position: relative;
+      z-index: 1000;
+    }
+
+    .alert-banner.hidden {
+      display: none;
+    }
+
+    .alert-content {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .alert-icon {
+      width: 24px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .alert-close {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .alert-close:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    @keyframes slideDown {
+      from { transform: translateY(-100%); }
+      to { transform: translateY(0); }
+    }
+
+    /* Header */
+    .header {
+      background: var(--card-bg);
+      padding: 16px 20px;
+      box-shadow: var(--shadow);
+      position: relative;
+      z-index: 999;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--primary), #2563eb);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    .logo-text {
+      font-weight: 700;
+      font-size: 20px;
+      color: var(--text);
+    }
+
+    .logo-text span {
+      color: var(--primary);
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Map Container */
+    .map_container {
+      height: 45vh;
+      min-height: 280px;
+      position: relative;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+
+    /* Route Selector */
+    .route-selector {
+      display: flex;
+      gap: 4px;
+      padding: 12px 16px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .route-selector::-webkit-scrollbar {
+      display: none;
+    }
+
+    .route-tab {
+      padding: 10px 20px;
+      border: none;
+      background: var(--bg);
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .route-tab:hover {
+      background: var(--border);
+    }
+
+    .route-tab.active {
+      color: white;
+    }
+
+    .route-tab[data-route="all"].active {
+      background: var(--primary);
+    }
+
+    .route-tab[data-route="B11"].active {
+      background: #3b82f6;
+    }
+
+    .route-tab[data-route="C15"].active {
+      background: #22c55e;
+    }
+
+    .route-tab[data-route="K10"].active {
+      background: #f59e0b;
+    }
+
+    .route-tab[data-route="E32"].active {
+      background: #8b5cf6;
+    }
+
+    .route-tab[data-route="H75"].active {
+      background: #06b6d4;
+    }
+
+    .route-tab[data-route="M86"].active {
+      background: #ec4899;
+    }
+
+    /* Stops Panel */
+    .stops-panel {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+    }
+
+    .stops-panel.hidden {
+      display: none;
+    }
+
+    .stops-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .stops-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .stops-count {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .stops-list {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .stops-list::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .stops-list::-webkit-scrollbar-track {
+      background: var(--border);
+      border-radius: 2px;
+    }
+
+    .stops-list::-webkit-scrollbar-thumb {
+      background: var(--text-muted);
+      border-radius: 2px;
+    }
+
+    .stop-card {
+      flex-shrink: 0;
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 10px 14px;
+      min-width: 120px;
+      border-left: 3px solid var(--route-color, #ccc);
+    }
+
+    .stop-card.current {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.05));
+      border-left-color: #3b82f6;
+    }
+
+    .stop-card.next {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
+      border-left-color: #22c55e;
+    }
+
+    .stop-card.next .stop-name::after {
+      content: ' →';
+    }
+
+    .stop-number {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .stop-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    /* Bus Cards Container */
+    .bus-list {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Bus Card */
+    .bus-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .bus-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .bus-card.hidden {
+      display: none;
+    }
+
+    .bus-card-header {
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .route-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    .route-badge.route-b11 { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .route-badge.route-c15 { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    .route-badge.route-k10 { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .route-badge.route-e32 { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+    .route-badge.route-h75 { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+    .route-badge.route-m86 { background: linear-gradient(135deg, #ec4899, #db2777); }
+
+    .bus-info {
+      flex: 1;
+    }
+
+    .bus-id {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--text);
+    }
+
+    .bus-route-name {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .bus-status-badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .bus-status-badge.on-time {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .bus-status-badge.delayed {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+
+    .bus-status-badge.critical {
+      background: #fee2e2;
+      color: #991b1b;
+      animation: criticalPulse 1.5s infinite;
+    }
+
+    @keyframes criticalPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .bus-card-body {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .bus-stat {
+      text-align: center;
+    }
+
+    .bus-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .bus-stat-value.arriving {
+      color: var(--success);
+    }
+
+    .bus-stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 4px;
+    }
+
+    .bus-stat-full {
+      grid-column: 1 / -1;
+      text-align: left;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .bus-stat-full .bus-stat-value {
+      font-size: 16px;
+      display: inline;
+      vertical-align: middle;
+    }
+
+    .bus-stat-full .bus-stat-label {
+      display: inline;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .next-stop-icon {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      background: var(--primary);
+      border-radius: 50%;
+      color: white;
+      text-align: center;
+      line-height: 20px;
+      font-size: 11px;
+      margin-right: 6px;
+    }
+
+    /* Loading State */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: var(--text-muted);
+    }
+
+    .loading::after {
+      content: '';
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-left: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Custom Leaflet Marker */
+    .bus-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      border: 3px solid white;
+      transition: transform 0.3s ease-out;
+    }
+
+    .bus-marker.route-b11 { background: #3b82f6; }
+    .bus-marker.route-c15 { background: #22c55e; }
+    .bus-marker.route-k10 { background: #f59e0b; }
+    .bus-marker.route-e32 { background: #8b5cf6; }
+    .bus-marker.route-h75 { background: #06b6d4; }
+    .bus-marker.route-m86 { background: #ec4899; }
+
+    .bus-marker:hover {
+      transform: scale(1.1);
+    }
+
+    /* Stop Marker */
+    .stop-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: white;
+      border: 3px solid currentColor;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Leaflet popup customization */
+    .leaflet-popup-content-wrapper {
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .leaflet-popup-content {
+      margin: 12px 16px;
+      font-family: inherit;
+    }
+
+    .popup-bus-id {
+      font-weight: 700;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+
+    .popup-route {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .popup-stop-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+
+    .popup-stop-route {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Footer */
+    .footer {
+      padding: 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .footer-update {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .update-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    /* Responsive */
+    @media (min-width: 480px) {
+      .bus-card-body {
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      .bus-stat-full {
+        grid-column: 1 / -1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Critical Delay Alert Banner -->
+  <div id="alertBanner" class="alert-banner hidden">
+    <div class="alert-content">
+      <div class="alert-icon">!</div>
+      <span id="alertText">Buses demorados detectados</span>
+    </div>
+    <button class="alert-close" onclick="MoveSmart.dismissAlert()">&times;</button>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <div class="logo-icon">M</div>
+        <div class="logo-text">Move<span>Smart</span> Bogotá</div>
+      </div>
+      <div class="header-status">
+        <div class="status-dot"></div>
+        <span>Tiempo real</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Map -->
+  <div class="map_container">
+    <div id="map"></div>
+  </div>
+
+  <!-- Route Selector -->
+  <nav class="route-selector">
+    <button class="route-tab active" data-route="all" onclick="MoveSmart.filterRoute('all')">Todas</button>
+    <button class="route-tab" data-route="B11" onclick="MoveSmart.filterRoute('B11')">B11</button>
+    <button class="route-tab" data-route="C15" onclick="MoveSmart.filterRoute('C15')">C15</button>
+    <button class="route-tab" data-route="K10" onclick="MoveSmart.filterRoute('K10')">K10</button>
+    <button class="route-tab" data-route="E32" onclick="MoveSmart.filterRoute('E32')">E32</button>
+    <button class="route-tab" data-route="H75" onclick="MoveSmart.filterRoute('H75')">H75</button>
+    <button class="route-tab" data-route="M86" onclick="MoveSmart.filterRoute('M86')">M86</button>
+  </nav>
+
+  <!-- Stops Panel -->
+  <div class="stops-panel hidden" id="stopsPanel">
+    <div class="stops-panel-header">
+      <span class="stops-title" id="stopsTitle">Paradas de la Ruta</span>
+      <span class="stops-count" id="stopsCount"></span>
+    </div>
+    <div class="stops-list" id="stopsList"></div>
+  </div>
+
+  <!-- Bus List -->
+  <main class="bus-list" id="busList">
+    <div class="loading">Cargando buses...</div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-update">
+      <div class="update-spinner"></div>
+      <span>Actualizando posiciones...</span>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    var MoveSmart = (function() {
+      // ============================================
+      // CONFIGURATION
+      // ============================================
+      var CONFIG = {
+        center: [4.7110, -74.0721],
+        zoom: 12,
+        positionUpdateInterval: 3000,
+        etaUpdateInterval: 1000,
+        delayProbability: 0.1,
+        criticalDelayThreshold: 5
+      };
+
+      // ============================================
+      // REAL TRANSMILENIO/SITP ROUTES FOR BOGOTÁ
+      // ============================================
+      var ROUTES = {
+        B11: {
+          name: 'B11 - Autonorte',
+          color: '#3b82f6',
+          stops: [
+            { name: 'Portal del Norte', lat: 4.7622, lng: -74.0529 },
+            { name: 'Alcaldía', lat: 4.7280, lng: -74.0420 },
+            { name: 'Prado', lat: 4.6961, lng: -74.0307 },
+            { name: 'Calle 127', lat: 4.6940, lng: -74.0340 },
+            { name: 'Pepe Sierra', lat: 4.6750, lng: -74.0400 },
+            { name: 'Calle 100', lat: 4.6938, lng: -74.0444 },
+            { name: 'Virrey', lat: 4.6650, lng: -74.0500 },
+            { name: 'Héroes', lat: 4.6280, lng: -74.0600 }
+          ],
+          path: [
+            // Portal del Norte to Alcalá
+            [4.7622, -74.0529],
+            [4.7560, -74.0510],
+            [4.7500, -74.0490],
+            [4.7450, -74.0475],
+            [4.7380, -74.0455],
+            [4.7280, -74.0420],
+            // Alcalá to Prado
+            [4.7220, -74.0390],
+            [4.7160, -74.0360],
+            [4.7100, -74.0330],
+            [4.7040, -74.0315],
+            [4.6961, -74.0307],
+            // Prado to Calle 127
+            [4.6955, -74.0315],
+            [4.6947, -74.0330],
+            [4.6940, -74.0340],
+            // Calle 127 to Pepe Sierra
+            [4.6890, -74.0355],
+            [4.6840, -74.0370],
+            [4.6790, -74.0390],
+            [4.6750, -74.0400],
+            // Pepe Sierra to Calle 100
+            [4.6810, -74.0415],
+            [4.6870, -74.0430],
+            [4.6938, -74.0444],
+            // Calle 100 to Virrey
+            [4.6860, -74.0460],
+            [4.6780, -74.0480],
+            [4.6700, -74.0495],
+            [4.6650, -74.0500],
+            // Virrey to Héroes
+            [4.6570, -74.0525],
+            [4.6490, -74.0550],
+            [4.6400, -74.0570],
+            [4.6340, -74.0585],
+            [4.6280, -74.0600]
+          ]
+        },
+        C15: {
+          name: 'C15 - Avenida Suba',
+          color: '#22c55e',
+          stops: [
+            { name: 'Portal de Suba', lat: 4.7433, lng: -74.0908 },
+            { name: 'La Campiña', lat: 4.7200, lng: -74.0800 },
+            { name: '21 Ángeles', lat: 4.7100, lng: -74.0700 },
+            { name: 'Niza-Calle 127', lat: 4.6950, lng: -74.0380 },
+            { name: 'Calle 116', lat: 4.6850, lng: -74.0500 },
+            { name: 'Calle 100', lat: 4.6938, lng: -74.0444 },
+            { name: 'San Martín', lat: 4.6650, lng: -74.0650 }
+          ],
+          path: [
+            // Portal de Suba to La Campiña
+            [4.7433, -74.0908],
+            [4.7380, -74.0880],
+            [4.7320, -74.0850],
+            [4.7260, -74.0825],
+            [4.7200, -74.0800],
+            // La Campiña to 21 Ángeles
+            [4.7170, -74.0770],
+            [4.7140, -74.0740],
+            [4.7110, -74.0710],
+            [4.7100, -74.0700],
+            // 21 Ángeles to Niza-Calle 127
+            [4.7080, -74.0630],
+            [4.7020, -74.0560],
+            [4.6980, -74.0490],
+            [4.6950, -74.0380],
+            // Niza-Calle 127 to Calle 116
+            [4.6920, -74.0420],
+            [4.6890, -74.0460],
+            [4.6850, -74.0500],
+            // Calle 116 to Calle 100
+            [4.6880, -74.0480],
+            [4.6910, -74.0460],
+            [4.6938, -74.0444],
+            // Calle 100 to San Martín
+            [4.6870, -74.0500],
+            [4.6800, -74.0550],
+            [4.6730, -74.0600],
+            [4.6650, -74.0650]
+          ]
+        },
+        K10: {
+          name: 'K10 - Avenida Eldorado',
+          color: '#f59e0b',
+          stops: [
+            { name: 'Ciudad Universitaria', lat: 4.6276, lng: -74.1102 },
+            { name: 'Universidad Nacional', lat: 4.6380, lng: -74.1059 },
+            { name: 'Quinta Paredes', lat: 4.6250, lng: -74.1200 },
+            { name: 'Gob. Cundinamarca', lat: 4.6150, lng: -74.1000 },
+            { name: 'Modelia', lat: 4.5950, lng: -74.0850 },
+            { name: 'Portal Eldorado', lat: 4.5580, lng: -74.1105 }
+          ],
+          path: [
+            // Ciudad Universitaria to Universidad Nacional
+            [4.6276, -74.1102],
+            [4.6310, -74.1085],
+            [4.6340, -74.1070],
+            [4.6380, -74.1059],
+            // Universidad Nacional to Quinta Paredes
+            [4.6340, -74.1100],
+            [4.6300, -74.1140],
+            [4.6250, -74.1200],
+            // Quinta Paredes to Gob. Cundinamarca
+            [4.6220, -74.1140],
+            [4.6190, -74.1080],
+            [4.6150, -74.1000],
+            // Gob. Cundinamarca to Modelia
+            [4.6090, -74.0950],
+            [4.6030, -74.0900],
+            [4.5950, -74.0850],
+            // Modelia to Portal Eldorado
+            [4.5870, -74.0900],
+            [4.5790, -74.0950],
+            [4.5710, -74.1000],
+            [4.5650, -74.1050],
+            [4.5580, -74.1105]
+          ]
+        },
+        E32: {
+          name: 'E32 - NQS Central',
+          color: '#8b5cf6',
+          stops: [
+            { name: 'Ricaurte', lat: 4.6120, lng: -74.1250 },
+            { name: 'Camping', lat: 4.6200, lng: -74.1150 },
+            { name: 'Universidad Nacional', lat: 4.6380, lng: -74.1059 },
+            { name: 'Campín', lat: 4.6480, lng: -74.0950 },
+            { name: 'Movistar Arena', lat: 4.6550, lng: -74.0850 },
+            { name: 'La Castellana', lat: 4.6680, lng: -74.0750 },
+            { name: 'Colina', lat: 4.6800, lng: -74.0650 },
+            { name: 'Akros', lat: 4.6920, lng: -74.0550 }
+          ],
+          path: [
+            [4.6120, -74.1250],
+            [4.6160, -74.1200],
+            [4.6200, -74.1150],
+            [4.6250, -74.1100],
+            [4.6310, -74.1085],
+            [4.6380, -74.1059],
+            [4.6430, -74.1000],
+            [4.6480, -74.0950],
+            [4.6515, -74.0900],
+            [4.6550, -74.0850],
+            [4.6615, -74.0800],
+            [4.6680, -74.0750],
+            [4.6740, -74.0700],
+            [4.6800, -74.0650],
+            [4.6860, -74.0600],
+            [4.6920, -74.0550]
+          ]
+        },
+        H75: {
+          name: 'H75 - Caracas',
+          color: '#06b6d4',
+          stops: [
+            { name: 'Portal Usme', lat: 4.5000, lng: -74.1500 },
+            { name: 'Consuelo', lat: 4.5300, lng: -74.1300 },
+            { name: 'Santa Lucía', lat: 4.5550, lng: -74.1150 },
+            { name: 'Alcalá', lat: 4.5750, lng: -74.1000 },
+            { name: 'Univ. Antonio Nariño', lat: 4.5900, lng: -74.0900 },
+            { name: 'Caracas/Calle 22', lat: 4.6000, lng: -74.0800 },
+            { name: 'Museo Nacional', lat: 4.6150, lng: -74.0700 },
+            { name: 'Calle 76', lat: 4.6250, lng: -74.0500 },
+            { name: 'Héroes', lat: 4.6280, lng: -74.0600 }
+          ],
+          path: [
+            [4.5000, -74.1500],
+            [4.5100, -74.1450],
+            [4.5200, -74.1400],
+            [4.5300, -74.1300],
+            [4.5400, -74.1250],
+            [4.5550, -74.1150],
+            [4.5650, -74.1100],
+            [4.5750, -74.1000],
+            [4.5825, -74.0950],
+            [4.5900, -74.0900],
+            [4.5950, -74.0850],
+            [4.6000, -74.0800],
+            [4.6075, -74.0750],
+            [4.6150, -74.0700],
+            [4.6200, -74.0600],
+            [4.6250, -74.0500],
+            [4.6265, -74.0550],
+            [4.6280, -74.0600]
+          ]
+        },
+        M86: {
+          name: 'M86 - Calle 80',
+          color: '#ec4899',
+          stops: [
+            { name: 'Portal de la 80', lat: 4.7800, lng: -74.0400 },
+            { name: 'Terminal Transferencia', lat: 4.7600, lng: -74.0450 },
+            { name: 'Calle 100', lat: 4.6938, lng: -74.0444 },
+            { name: 'Calle 85', lat: 4.6500, lng: -74.0550 },
+            { name: 'Calle 76', lat: 4.6250, lng: -74.0500 },
+            { name: 'Museo del 90', lat: 4.6100, lng: -74.0650 },
+            { name: 'Calle 45', lat: 4.5950, lng: -74.0800 },
+            { name: 'Calle 26', lat: 4.5800, lng: -74.0950 }
+          ],
+          path: [
+            [4.7800, -74.0400],
+            [4.7750, -74.0410],
+            [4.7700, -74.0420],
+            [4.7650, -74.0430],
+            [4.7600, -74.0450],
+            [4.7450, -74.0450],
+            [4.7300, -74.0450],
+            [4.7150, -74.0450],
+            [4.7050, -74.0447],
+            [4.6938, -74.0444],
+            [4.6800, -74.0470],
+            [4.6650, -74.0510],
+            [4.6500, -74.0550],
+            [4.6375, -74.0525],
+            [4.6250, -74.0500],
+            [4.6175, -74.0575],
+            [4.6100, -74.0650],
+            [4.6025, -74.0725],
+            [4.5950, -74.0800],
+            [4.5875, -74.0875],
+            [4.5800, -74.0950]
+          ]
+        }
+      };
+
+      // ============================================
+      // STATE (Single Source of Truth)
+      // ============================================
+      var state = {
+        buses: [],
+        selectedRoute: 'all',
+        lastUpdate: null,
+        alertDismissed: false
+      };
+
+      var map = null;
+      var markers = {};
+      var stopMarkers = [];
+      var routePolyline = null;
+      var positionInterval = null;
+      var etaInterval = null;
+
+      // ============================================
+      // HELPER: Calculate which stop index corresponds to a path index
+      // ============================================
+      function getStopIndexForPosition(route, positionIndex) {
+        var pathLength = route.path.length;
+        var stopsCount = route.stops.length;
+        
+        // Calculate which stop the bus is approaching based on position in path
+        // Map path positions evenly across stops
+        var ratio = positionIndex / pathLength;
+        var stopIndex = Math.floor(ratio * stopsCount);
+        
+        // Clamp to valid range (0 to stopsCount - 1)
+        stopIndex = Math.max(0, Math.min(stopIndex, stopsCount - 1));
+        
+        return stopIndex;
+      }
+
+      // ============================================
+      // BUS INITIALIZATION
+      // ============================================
+      function initializeBuses() {
+        var busConfigs = [
+          {
+            id: 'BUS-001',
+            route: 'B11',
+            positionIndex: 5,
+            etaMinutes: 4,
+            delayMinutes: 0,
+            status: 'on-time'
+          },
+          {
+            id: 'BUS-002',
+            route: 'C15',
+            positionIndex: 8,
+            etaMinutes: 3,
+            delayMinutes: 0,
+            status: 'on-time'
+          },
+          {
+            id: 'BUS-003',
+            route: 'K10',
+            positionIndex: 6,
+            etaMinutes: 5,
+            delayMinutes: 0,
+            status: 'on-time'
+          },
+          {
+            id: 'BUS-004',
+            route: 'E32',
+            positionIndex: 4,
+            etaMinutes: 3,
+            delayMinutes: 0,
+            status: 'on-time'
+          },
+          {
+            id: 'BUS-005',
+            route: 'H75',
+            positionIndex: 6,
+            etaMinutes: 4,
+            delayMinutes: 0,
+            status: 'on-time'
+          },
+          {
+            id: 'BUS-006',
+            route: 'M86',
+            positionIndex: 5,
+            etaMinutes: 2,
+            delayMinutes: 0,
+            status: 'on-time'
+          }
+        ];
+
+        state.buses = busConfigs.map(function(config) {
+          var route = ROUTES[config.route];
+          var position = route.path[config.positionIndex];
+          
+          // Calculate current stop index based on position
+          var currentStopIndex = getStopIndexForPosition(route, config.positionIndex);
+          
+          // Next stop is the next one in sequence (with wrapping)
+          var nextStopIndex = (currentStopIndex + 1) % route.stops.length;
+          
+          return {
+            id: config.id,
+            route: config.route,
+            routeName: route.name,
+            color: route.color,
+            position: {
+              lat: position[0],
+              lng: position[1]
+            },
+            positionIndex: config.positionIndex,
+            currentStopIndex: currentStopIndex,
+            etaMinutes: config.etaMinutes,
+            delayMinutes: config.delayMinutes,
+            status: config.status,
+            nextStop: route.stops[nextStopIndex].name
+          };
+        });
+
+        state.lastUpdate = new Date();
+      }
+
+      // ============================================
+      // MAP SETUP
+      // ============================================
+      function initializeMap() {
+        map = L.map('map').setView(CONFIG.center, CONFIG.zoom);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19
+        }).addTo(map);
+
+        state.buses.forEach(function(bus) {
+          createBusMarker(bus);
+        });
+      }
+
+      function createBusMarker(bus) {
+        var markerIcon = L.divIcon({
+          className: 'custom-bus-marker',
+          html: '<div class="bus-marker route-' + bus.route.toLowerCase() + '">' + bus.route + '</div>',
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        });
+
+        markers[bus.id] = L.marker([bus.position.lat, bus.position.lng], {
+          icon: markerIcon
+        }).addTo(map);
+
+        markers[bus.id].bindPopup(
+          '<div class="popup-bus-id">' + bus.id + '</div>' +
+          '<div class="popup-route">' + bus.routeName + '</div>'
+        );
+      }
+
+      function updateMarkerPosition(bus) {
+        var markerIcon = L.divIcon({
+          className: 'custom-bus-marker',
+          html: '<div class="bus-marker route-' + bus.route.toLowerCase() + '">' + bus.route + '</div>',
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        });
+
+        markers[bus.id].setLatLng([bus.position.lat, bus.position.lng]);
+        markers[bus.id].setIcon(markerIcon);
+        markers[bus.id].bindPopup(
+          '<div class="popup-bus-id">' + bus.id + '</div>' +
+          '<div class="popup-route">' + bus.routeName + '</div>'
+        );
+      }
+
+      // ============================================
+      // STOP MARKERS
+      // ============================================
+      function clearStopMarkers() {
+        stopMarkers.forEach(function(marker) {
+          map.removeLayer(marker);
+        });
+        stopMarkers = [];
+      }
+
+      function showRouteStops(routeId) {
+        // Clear existing stop markers first
+        clearStopMarkers();
+        
+        // Clear existing polyline
+        if (routePolyline) {
+          map.removeLayer(routePolyline);
+          routePolyline = null;
+        }
+        
+        if (routeId === 'all') {
+          return;
+        }
+        
+        var route = ROUTES[routeId];
+        if (!route) return;
+        
+        // Draw dashed polyline for the route path
+        routePolyline = L.polyline(route.path, {
+          color: route.color,
+          weight: 4,
+          opacity: 0.6,
+          dashArray: '10, 10',
+          clickable: false
+        }).addTo(map);
+        
+        // Add stop markers
+        route.stops.forEach(function(stop, index) {
+          var stopIcon = L.divIcon({
+            className: 'custom-stop-marker',
+            html: '<div class="stop-marker" style="border-color: ' + route.color + '; color: ' + route.color + ';"></div>',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+          });
+          
+          var marker = L.marker([stop.lat, stop.lng], {
+            icon: stopIcon
+          }).addTo(map);
+          
+          marker.bindPopup(
+            '<div class="popup-stop-name">' + stop.name + '</div>' +
+            '<div class="popup-stop-route">' + route.name + ' - Parada ' + (index + 1) + '</div>'
+          );
+          
+          stopMarkers.push(marker);
+        });
+      }
+
+      // ============================================
+      // POSITION SIMULATION
+      // ============================================
+      function simulatePositionUpdates() {
+        state.buses.forEach(function(bus) {
+          var route = ROUTES[bus.route];
+          var pathLength = route.path.length;
+          var stopsCount = route.stops.length;
+
+          // Move forward along route
+          bus.positionIndex = (bus.positionIndex + 1) % pathLength;
+          var newPosition = route.path[bus.positionIndex];
+
+          bus.position.lat = newPosition[0];
+          bus.position.lng = newPosition[1];
+
+          // Update current stop index based on new position
+          var newStopIndex = getStopIndexForPosition(route, bus.positionIndex);
+          
+          // Only update if we've moved to a new stop section
+          if (newStopIndex !== bus.currentStopIndex) {
+            bus.currentStopIndex = newStopIndex;
+          }
+          
+          // Next stop is the next one in sequence
+          var nextStopIndex = (bus.currentStopIndex + 1) % stopsCount;
+          bus.nextStop = route.stops[nextStopIndex].name;
+
+          // Random delay injection
+          if (Math.random() < CONFIG.delayProbability && bus.status !== 'critical') {
+            var delayIncrease = Math.floor(Math.random() * 3) + 1;
+            bus.delayMinutes = bus.delayMinutes + delayIncrease;
+
+            if (bus.delayMinutes >= CONFIG.criticalDelayThreshold) {
+              bus.status = 'critical';
+            } else if (bus.delayMinutes > 0) {
+              bus.status = 'delayed';
+            }
+          }
+
+          // Occasionally recover from delay
+          if (bus.delayMinutes > 0 && Math.random() < 0.15) {
+            bus.delayMinutes = Math.max(0, bus.delayMinutes - 1);
+            if (bus.delayMinutes === 0) {
+              bus.status = 'on-time';
+            }
+          }
+
+          // Update ETA based on position and delay
+          var baseEta = Math.max(1, Math.floor((pathLength - bus.positionIndex) * 0.7));
+          bus.etaMinutes = baseEta + bus.delayMinutes;
+
+          updateMarkerPosition(bus);
+        });
+
+        // Update stops panel if a route is selected
+        if (state.selectedRoute !== 'all') {
+          updateStopsPanel(state.selectedRoute);
+        }
+
+        state.lastUpdate = new Date();
+        updateAlertBanner();
+        renderBusCards();
+      }
+
+      function simulateEtaCountdown() {
+        state.buses.forEach(function(bus) {
+          if (bus.etaMinutes > 0) {
+            bus.etaMinutes = Math.max(1, bus.etaMinutes - 1);
+          } else {
+            // Reset ETA when it reaches 0
+            var route = ROUTES[bus.route];
+            bus.etaMinutes = Math.max(1, Math.floor(route.path.length * 0.5));
+          }
+        });
+
+        renderBusCards();
+      }
+
+      // ============================================
+      // ALERT BANNER
+      // ============================================
+      function updateAlertBanner() {
+        if (state.alertDismissed) return;
+
+        var criticalBuses = state.buses.filter(function(bus) {
+          return bus.status === 'critical';
+        });
+
+        var alertBanner = document.getElementById('alertBanner');
+        var alertText = document.getElementById('alertText');
+
+        if (criticalBuses.length > 0) {
+          var delayInfo = criticalBuses.map(function(bus) {
+            return bus.id + ' (' + bus.delayMinutes + ' min)';
+          }).join(', ');
+
+          alertText.textContent = 'Demoras críticas: ' + delayInfo;
+          alertBanner.classList.remove('hidden');
+        } else {
+          alertBanner.classList.add('hidden');
+        }
+      }
+
+      function dismissAlert() {
+        state.alertDismissed = true;
+        document.getElementById('alertBanner').classList.add('hidden');
+      }
+
+      // ============================================
+      // ROUTE FILTERING
+      // ============================================
+      function updateStopsPanel(routeId) {
+        var panel = document.getElementById('stopsPanel');
+        var title = document.getElementById('stopsTitle');
+        var count = document.getElementById('stopsCount');
+        var list = document.getElementById('stopsList');
+
+        if (routeId === 'all') {
+          panel.classList.add('hidden');
+          return;
+        }
+
+        var route = ROUTES[routeId];
+        if (!route) return;
+
+        panel.classList.remove('hidden');
+        title.textContent = 'Paradas de ' + route.name;
+        count.textContent = route.stops.length + ' paradas';
+
+        // Find which bus is on this route and its current/next stop
+        var bus = null;
+        state.buses.forEach(function(b) {
+          if (b.route === routeId) bus = b;
+        });
+
+        var currentStopIndex = bus ? bus.currentStopIndex : -1;
+        var nextStopIndex = (currentStopIndex + 1) % route.stops.length;
+
+        var html = route.stops.map(function(stop, index) {
+          var stopClass = '';
+          if (index === currentStopIndex) stopClass = 'current';
+          else if (index === nextStopIndex) stopClass = 'next';
+
+          return '<div class="stop-card ' + stopClass + '" style="--route-color: ' + route.color + ';">' +
+            '<div class="stop-number">Parada ' + (index + 1) + '</div>' +
+            '<div class="stop-name">' + stop.name + '</div>' +
+          '</div>';
+        }).join('');
+
+        list.innerHTML = html;
+      }
+
+      function filterRoute(route) {
+        state.selectedRoute = route;
+
+        // Update tab UI
+        document.querySelectorAll('.route-tab').forEach(function(tab) {
+          tab.classList.remove('active');
+          if (tab.dataset.route === route) {
+            tab.classList.add('active');
+          }
+        });
+
+        // Show/hide bus cards based on filter
+        document.querySelectorAll('.bus-card').forEach(function(card) {
+          var busRoute = card.dataset.route;
+          if (route === 'all' || busRoute === route) {
+            card.classList.remove('hidden');
+          } else {
+            card.classList.add('hidden');
+          }
+        });
+        
+        // Update map with route stops and polyline
+        showRouteStops(route);
+
+        // Update stops panel
+        updateStopsPanel(route);
+      }
+
+      // ============================================
+      // RENDER BUS CARDS
+      // ============================================
+      function renderBusCards() {
+        var busList = document.getElementById('busList');
+
+        var html = state.buses.map(function(bus) {
+          var statusClass = bus.status === 'on-time' ? 'on-time' :
+                           bus.status === 'delayed' ? 'delayed' : 'critical';
+
+          var statusText = bus.status === 'on-time' ? 'En hora' :
+                          bus.status === 'delayed' ? 'Demorado ' + bus.delayMinutes + ' min' :
+                          'Demorado ' + bus.delayMinutes + ' min';
+
+          var etaDisplay = bus.etaMinutes < 1 ? 'Llegando' : bus.etaMinutes + ' min';
+          var etaClass = bus.etaMinutes < 1 ? 'arriving' : '';
+
+          var cardClass = state.selectedRoute === 'all' || state.selectedRoute === bus.route ? '' : 'hidden';
+
+          return '<div class="bus-card ' + cardClass + '" data-route="' + bus.route + '">' +
+            '<div class="bus-card-header">' +
+              '<div class="route-badge route-' + bus.route.toLowerCase() + '">' + bus.route + '</div>' +
+              '<div class="bus-info">' +
+                '<div class="bus-id">' + bus.id + '</div>' +
+                '<div class="bus-route-name">' + bus.routeName + '</div>' +
+              '</div>' +
+              '<div class="bus-status-badge ' + statusClass + '">' + statusText + '</div>' +
+            '</div>' +
+            '<div class="bus-card-body">' +
+              '<div class="bus-stat">' +
+                '<div class="bus-stat-value ' + etaClass + '">' + etaDisplay + '</div>' +
+                '<div class="bus-stat-label">ETA</div>' +
+              '</div>' +
+              '<div class="bus-stat">' +
+                '<div class="bus-stat-value">' + bus.delayMinutes + '</div>' +
+                '<div class="bus-stat-label">Min demora</div>' +
+              '</div>' +
+              '<div class="bus-stat">' +
+                '<div class="bus-stat-value">' + bus.positionIndex + '</div>' +
+                '<div class="bus-stat-label">Posición</div>' +
+              '</div>' +
+              '<div class="bus-stat-full">' +
+                '<span class="next-stop-icon">▶</span>' +
+                '<span class="bus-stat-value">' + bus.nextStop + '</span>' +
+                '<span class="bus-stat-label">Próxima parada</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+
+        busList.innerHTML = html;
+      }
+
+      // ============================================
+      // PUBLIC API
+      // ============================================
+      return {
+        init: function() {
+          initializeBuses();
+          initializeMap();
+          renderBusCards();
+          updateAlertBanner();
+
+          // Start simulation loops
+          positionInterval = setInterval(simulatePositionUpdates, CONFIG.positionUpdateInterval);
+          etaInterval = setInterval(simulateEtaCountdown, CONFIG.etaUpdateInterval);
+        },
+
+        filterRoute: filterRoute,
+
+        dismissAlert: dismissAlert,
+
+        getState: function() {
+          return state;
+        }
+      };
+    })();
+
+    // Initialize when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      MoveSmart.init();
+    });
+  </script>
+</body>
+</html>
